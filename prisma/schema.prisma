@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+enum NotificationScope {
+  GLOBAL
+  ORGANIZATION
+}
+
+model User {
+  id              String     @id @default(cuid())
+  name            String
+  email           String     @unique
+  passwordHash    String
+  status          UserStatus @default(ACTIVE)
+  failedAttempts  Int        @default(0)
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  memberships     Membership[]
+  sessions        Session[]
+  passwordResets  PasswordResetToken[]
+  loginAttempts   LoginAttempt[]
+  auditLogs       AuditLog[] @relation("ActorLogs")
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+  notifications Notification[]
+  settings    Setting[]
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  isSystem    Boolean          @default(false)
+  permissions RolePermission[]
+  memberships Membership[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String      @id @default(cuid())
+  role         Role        @relation(fields: [roleId], references: [id])
+  roleId       String
+  permission   Permission  @relation(fields: [permissionId], references: [id])
+  permissionId String
+
+  @@unique([roleId, permissionId])
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  role           Role         @relation(fields: [roleId], references: [id])
+  roleId         String
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  entity      String
+  entityId    String
+  before      Json?
+  after       Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("ActorLogs", fields: [actorId], references: [id])
+  actorId     String?
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+}
+
+model Notification {
+  id            String            @id @default(cuid())
+  title         String
+  message       String
+  scope         NotificationScope @default(GLOBAL)
+  organization  Organization?     @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  createdAt     DateTime          @default(now())
+  reads         NotificationRead[]
+}
+
+model NotificationRead {
+  id             String       @id @default(cuid())
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  notification   Notification @relation(fields: [notificationId], references: [id])
+  notificationId String
+  readAt         DateTime     @default(now())
+}
+
+model Setting {
+  id              String       @id @default(cuid())
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  organizationId  String
+  key             String
+  value           String
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  email     String
+  success   Boolean
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
